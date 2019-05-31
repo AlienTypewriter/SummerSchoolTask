@@ -16,8 +16,10 @@ from math import trunc, atan2
 from PIL.ImageOps import grayscale
 from numpy.random import randint
 
+images = []
+
 def main(args, path):
-    filepath = path
+    filepath = ''
     try:
         ops, longops = getopt.getopt(args, "p:")
     except getopt.GetoptError:
@@ -25,26 +27,21 @@ def main(args, path):
         return
     for o,a in ops:
         if o=="-p":
-            filepath+=a
+            filepath=a
         else:
             print("usage: comparator.py -p imagepath")
             return         
-    images = []
     files = [f for f in listdir(filepath) if isfile(join(filepath,f))]
     for file in files:
         try:
-            images.append(Image.open(filepath+"\\"+file))
+            image = Image.open(join(filepath,file))
+            images.append(image)
         except IOError:
             print("cannot convert", file)
-    image_pairs = []
-    name_pairs = []
-    for i in range(len(images)-1):
-        for j in range(i+1,len(images)-1):
-            image_pairs.append((images[i],images[j]))
-            name_pairs.append((files[i], files[j]))
-    for i in range(len(image_pairs)):
-        if (compare(image_pairs[i][0], image_pairs[i][1])) is True:
-            print(name_pairs[i][0]+" "+name_pairs[i][1]+" are similar")
+    for i in range(len(images)):
+        for j in range(i+1,len(images)):
+            if (compare(i, j)) is True:
+                print(files[i]+" "+files[j]+" are similar")        
     
 def canny(image):
     imcopy = grayscale(image)
@@ -83,8 +80,7 @@ def canny(image):
                             imcopy3.putpixel((i,j),0)
                     if strong:
                         break
-    imcopy3.show()
-    return imcopy3, gradients
+    return imcopy3
 
 def sobel(image):
     imcopy = Image.new("L", image.size, 0)
@@ -124,32 +120,35 @@ def nms(image, gradients):
                     image.putpixel((i,j),0)
     return image
 
-def compare(image1, image2):
-    if image2.size[0]>image1.size[0] or image2.size[1]>image1.size[1]:
-        image1.resize(image2.size)
-    else:
-        image2.resize(image1.size)
+def compare(im1, im2):
+    mins = min(images[im1].size, images[im2].size)
+    image1 = images[im1].resize(mins)
+    image2 = images[im2].resize(mins)
     qr1 = list(image1.getdata())
     qr2 = list(image2.getdata())
     qrc = 0
-    for i in range(200):
+    for i in range(60):
         for j in range(3):
             r = randint(0, min((len(qr1)-1,len(qr2)-1)))
             if qr1[r][j]>qr2[r][j]*1.4 or qr1[r][j]<qr2[r][j]*0.7:
                 qrc+=1
-    if qrc>80:
-        return False
-    total = image1.size[0]*image1.size[1]
-    temp1, gr1 = getGradient(image1)
-    temp2, gr2 = getGradient(image2)
-    toCompare1 = list(temp1.getdata())
-    toCompare2 = list(temp2.getdata())
+        if qrc>90:
+            return False
+    temp1 = canny(image1.resize((300,300), Image.LANCZOS))
+    temp2 = canny(image2.resize((300,300), Image.LANCZOS))
+    total = 90000
+    #tc -- toCompare
+    tc1 = list(temp1.getdata())
+    tc2 = list(temp2.getdata())
     comparable = 0
+    col = image1.size[1]
     for i in range(image1.size[0]):
-        for j in range(image1.size[1]):
-            if gr1[i][j]*0.95<=gr2[i][j] and gr1[i][j]*1.05>=gr2[i][j]:
+        for j in range(col):
+            if tc1[col+j]*0.95<=tc2[col+j] and tc1[col+j]*1.05>=tc2[col+j]:
                 comparable +=1
-    return comparable>(0.9*total)
+            if comparable>=0.9*total:
+                return True
+    return False
 
 if __name__ == '__main__':
     main(sys.argv[1:], sys.argv[0][:sys.argv[0].index("\comparator.py")])
